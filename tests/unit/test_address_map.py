@@ -153,6 +153,16 @@ class TestAddressMapper:
         assert mapper.get_module("same_name_exe") is not None
         assert mapper.get_module("same_name_dll") is None
 
+    def test_single_stem_prefers_exe_even_if_dll_seen_first(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo("same_name_dll", 0x71000000, 0x1000),
+            ModuleInfo("same_name_exe", 0x70000000, 0x1000),
+        ]
+        result = mapper.update_from_modules(runtime, {"same-name": 0x140000000})
+        assert result["mapped"] == 1
+        assert mapper.get_module("same_name_exe") is not None
+
 
 class TestOrdinalParsing:
     def setup_method(self):

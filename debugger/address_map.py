@@ -109,7 +109,16 @@ class AddressMapper:
 
         used_ghidra_names: set[str] = set()
 
-        for mod in runtime_modules:
+        def _module_priority(mod: ModuleInfo) -> tuple[int, int]:
+            keys = self._module_lookup_keys(mod.name)
+            primary = keys[0] if keys else ""
+            if primary.endswith(".exe"):
+                return (0, 0)
+            if primary.endswith(".dll"):
+                return (1, 0)
+            return (2, 0)
+
+        for mod in sorted(runtime_modules, key=_module_priority):
             match = None
             for key in self._module_lookup_keys(mod.name):
                 if key in ghidra_normalized:
