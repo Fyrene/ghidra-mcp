@@ -141,6 +141,16 @@ class TestAddressMapper:
         assert mapper.to_runtime(0x140000010, "same_name_exe") == 0x70000010
         assert mapper.to_runtime(0x180000010, "same_name_dll") == 0x71000010
 
+    def test_same_lookup_key_with_identical_base_is_not_ambiguous(self):
+        mapper = AddressMapper()
+        runtime = [ModuleInfo("game.exe", 0x70000000, 0x1000)]
+        result = mapper.update_from_modules(
+            runtime,
+            {"/projA/game.exe": 0x140000000, "/projB/game.exe": 0x140000000},
+        )
+        assert result["mapped"] == 1
+        assert mapper.to_runtime(0x140000010, "game.exe") == 0x70000010
+
 
 class TestOrdinalParsing:
     def setup_method(self):

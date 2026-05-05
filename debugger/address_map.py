@@ -99,7 +99,7 @@ class AddressMapper:
         for name, base in ghidra_bases.items():
             for key in self._module_lookup_keys(name):
                 existing = ghidra_normalized.get(key)
-                if existing is not None and existing != (name, base):
+                if existing is not None and existing[1] != base:
                     ambiguous_ghidra_keys.add(key)
                     continue
                 ghidra_normalized[key] = (name, base)
