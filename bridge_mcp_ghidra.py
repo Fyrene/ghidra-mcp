@@ -806,6 +806,7 @@ STATIC_TOOL_NAMES = {
     "debugger_detach",
     "debugger_status",
     "debugger_modules",
+    "debugger_sync_modules",
     "debugger_resolve_ordinal",
     "debugger_set_breakpoint",
     "debugger_remove_breakpoint",
@@ -1572,37 +1573,7 @@ def debugger_attach(target: str) -> str:
     # Auto-sync address map if Ghidra is connected
     if _transport_mode != "none":
         try:
-            # Fetch image bases from Ghidra for all open programs
-            programs_text = dispatch_get("/list_open_programs")
-            if programs_text:
-                programs_data = json.loads(programs_text)
-                programs = (
-                    programs_data
-                    if isinstance(programs_data, list)
-                    else programs_data.get("programs", [])
-                )
-                ghidra_bases = {}
-                for prog in programs:
-                    prog_path = (
-                        prog
-                        if isinstance(prog, str)
-                        else prog.get("path", prog.get("name", ""))
-                    )
-                    if prog_path:
-                        try:
-                            meta_text = dispatch_get(
-                                "/get_metadata", params={"program": prog_path}
-                            )
-                            meta = json.loads(meta_text)
-                            image_base = meta.get("imageBase", meta.get("image_base"))
-                            if image_base:
-                                ghidra_bases[prog_path] = image_base
-                        except Exception:
-                            pass
-                if ghidra_bases:
-                    _debugger_request(
-                        "POST", "/debugger/sync_modules", {"ghidra_bases": ghidra_bases}
-                    )
+            _sync_debugger_modules_from_ghidra()
         except Exception as e:
             logger.warning(f"Auto-sync address map failed (non-fatal): {e}")
 
@@ -1629,6 +1600,47 @@ def debugger_modules() -> str:
     and the address offset between them.
     """
     return _debugger_request("GET", "/debugger/modules")
+
+
+def _sync_debugger_modules_from_ghidra() -> str:
+    """Collect open-program image bases from Ghidra and sync debugger mapper."""
+    programs_text = dispatch_get("/list_open_programs")
+    if not programs_text:
+        return json.dumps({"error": "No response from /list_open_programs"})
+
+    programs_data = json.loads(programs_text)
+    programs = (
+        programs_data if isinstance(programs_data, list) else programs_data.get("programs", [])
+    )
+
+    ghidra_bases = {}
+    for prog in programs:
+        prog_path = prog if isinstance(prog, str) else prog.get("path", prog.get("name", ""))
+        if not prog_path:
+            continue
+        try:
+            meta_text = dispatch_get("/get_metadata", params={"program": prog_path})
+            meta = json.loads(meta_text)
+            image_base = meta.get("imageBase", meta.get("image_base"))
+            if image_base:
+                ghidra_bases[prog_path] = image_base
+        except Exception:
+            continue
+
+    if not ghidra_bases:
+        return json.dumps({"error": "No open programs with image base metadata"})
+    return _debugger_request("POST", "/debugger/sync_modules", {"ghidra_bases": ghidra_bases})
+
+
+@mcp.tool()
+def debugger_sync_modules() -> str:
+    """Synchronize debugger runtime modules with Ghidra program image bases."""
+    if _transport_mode == "none":
+        return json.dumps({"error": "Not connected to Ghidra (transport mode: none)"})
+    try:
+        return _sync_debugger_modules_from_ghidra()
+    except Exception as e:
+        return json.dumps({"error": f"Debugger module sync failed: {e}"})
 
 
 @mcp.tool()
