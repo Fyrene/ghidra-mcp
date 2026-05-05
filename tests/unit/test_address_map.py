@@ -121,6 +121,60 @@ class TestAddressMapper:
         assert "A.dll" in result["mapped_modules"]
         assert "B.dll" in result["unmapped_modules"]
 
+    def test_sanitized_dbgeng_module_name_matches_ghidra_program_name(self):
+        mapper = AddressMapper()
+        runtime = [ModuleInfo("a_b_c_exe", 0x7FF700000000, 0x200000)]
+        result = mapper.update_from_modules(runtime, {"/a b-c.exe": 0x150000000})
+        assert result["mapped"] == 1
+        assert mapper.to_runtime(0x150001234, "a_b_c_exe") == 0x7FF700001234
+
+    def test_same_stem_exe_and_dll_do_not_collide(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo("same_name_exe", 0x70000000, 0x1000),
+            ModuleInfo("same_name_dll", 0x71000000, 0x1000),
+        ]
+        result = mapper.update_from_modules(
+            runtime,
+            {"same-name.exe": 0x150000000, "same-name.dll": 0x190000000},
+        )
+        assert result["mapped"] == 2
+        assert mapper.to_runtime(0x150000010, "same_name_exe") == 0x70000010
+        assert mapper.to_runtime(0x190000010, "same_name_dll") == 0x71000010
+
+    def test_single_ghidra_stem_does_not_map_to_both_exe_and_dll(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo("same_name_exe", 0x70000000, 0x1000),
+            ModuleInfo("same_name_dll", 0x71000000, 0x1000),
+        ]
+        result = mapper.update_from_modules(runtime, {"same-name": 0x150000000})
+        assert result["mapped"] == 1
+        assert mapper.get_module("same_name_exe") is not None
+        assert mapper.get_module("same_name_dll") is None
+
+    def test_single_stem_prefers_exe_even_if_dll_seen_first(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo("same_name_dll", 0x71000000, 0x1000),
+            ModuleInfo("same_name_exe", 0x70000000, 0x1000),
+        ]
+        result = mapper.update_from_modules(runtime, {"same-name": 0x150000000})
+        assert result["mapped"] == 1
+        assert mapper.get_module("same_name_exe") is not None
+
+    def test_fuzzy_lookup_handles_sanitized_exe_name(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo(
+                r"C:\\test\\app\\bin\\sample_client.exe",
+                0x7FF700000000,
+                0x200000,
+            )
+        ]
+        mapper.update_from_modules(runtime, {"sample_client": 0x150000000})
+        assert mapper.get_module("sample_client_exe") is not None
+
 
 class TestOrdinalParsing:
     def setup_method(self):
