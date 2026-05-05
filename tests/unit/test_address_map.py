@@ -167,13 +167,13 @@ class TestAddressMapper:
         mapper = AddressMapper()
         runtime = [
             ModuleInfo(
-                r"C:\\Games\\Project Zero\\bin\\GameClient - Retail.exe",
+                r"C:\\test\\app\\bin\\sample_client.exe",
                 0x7FF700000000,
                 0x200000,
             )
         ]
-        mapper.update_from_modules(runtime, {"GameClient - Retail": 0x150000000})
-        assert mapper.get_module("GameClient___Retail_exe") is not None
+        mapper.update_from_modules(runtime, {"sample_client": 0x150000000})
+        assert mapper.get_module("sample_client_exe") is not None
 
 
 class TestOrdinalParsing:
