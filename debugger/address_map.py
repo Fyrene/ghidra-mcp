@@ -163,6 +163,37 @@ class AddressMapper:
             mapping = self._modules.get(key)
             if mapping is not None:
                 return mapping
+        return self._fuzzy_resolve_module(name)
+
+    def _fuzzy_resolve_module(self, name: str) -> Optional[ModuleMapping]:
+        """Fallback module resolution for sanitized caller-provided names."""
+        requested_keys = set(self._module_lookup_keys(name, include_stem_fallback=True))
+        if not requested_keys:
+            return None
+
+        candidates: List[ModuleMapping] = []
+        for mapping in self._unique_modules():
+            mapping_keys = set(self._module_lookup_keys(mapping.name, include_stem_fallback=True))
+            if requested_keys.intersection(mapping_keys):
+                candidates.append(mapping)
+
+        if not candidates:
+            return None
+        requested_primary = self._normalize_module_name(name)
+        if requested_primary.endswith(".exe"):
+            candidates = [m for m in candidates if self._normalize_module_name(m.name).endswith(".exe")]
+        elif requested_primary.endswith(".dll"):
+            candidates = [m for m in candidates if self._normalize_module_name(m.name).endswith(".dll")]
+
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+
+        if requested_primary.endswith(".exe"):
+            return None
+        if requested_primary.endswith(".dll"):
+            return None
         return None
 
     def get_all_modules(self) -> List[ModuleMapping]:

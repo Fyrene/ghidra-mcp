@@ -163,6 +163,18 @@ class TestAddressMapper:
         assert result["mapped"] == 1
         assert mapper.get_module("same_name_exe") is not None
 
+    def test_fuzzy_lookup_handles_sanitized_exe_name(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo(
+                r"C:\\Games\\Warhammer 40,000 Space Marine 2 (2024)\\Space Marine 2\\client_pc\\root\\bin\\pc\\Warhammer 40000 Space Marine 2 - Retail.exe",
+                0x7FF700000000,
+                0x200000,
+            )
+        ]
+        mapper.update_from_modules(runtime, {"Warhammer 40000 Space Marine 2 - Retail": 0x140000000})
+        assert mapper.get_module("Warhammer_40000_Space_Marine_2___Retail_exe") is not None
+
 
 class TestOrdinalParsing:
     def setup_method(self):
