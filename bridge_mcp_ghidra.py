@@ -1608,19 +1608,27 @@ def _sync_debugger_modules_from_ghidra() -> str:
     if not programs_text:
         return json.dumps({"error": "No response from /list_open_programs"})
 
-    programs_data = json.loads(programs_text)
+    programs_data = _unwrap_response_data(programs_text)
     programs = (
         programs_data if isinstance(programs_data, list) else programs_data.get("programs", [])
     )
 
     ghidra_bases = {}
     for prog in programs:
-        prog_path = prog if isinstance(prog, str) else prog.get("path", prog.get("name", ""))
+        if isinstance(prog, str):
+            prog_path = prog
+            inline_base = None
+        else:
+            prog_path = prog.get("path") or prog.get("name", "")
+            inline_base = prog.get("image_base") or prog.get("imageBase")
         if not prog_path:
+            continue
+        if inline_base:
+            ghidra_bases[prog_path] = inline_base
             continue
         try:
             meta_text = dispatch_get("/get_metadata", params={"program": prog_path})
-            meta = json.loads(meta_text)
+            meta = _unwrap_response_data(meta_text)
             image_base = meta.get("imageBase", meta.get("image_base"))
             if image_base:
                 ghidra_bases[prog_path] = image_base
