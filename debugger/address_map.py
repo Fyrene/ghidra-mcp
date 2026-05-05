@@ -97,7 +97,7 @@ class AddressMapper:
         ghidra_normalized: Dict[str, Tuple[str, int]] = {}
         ambiguous_ghidra_keys: set[str] = set()
         for name, base in ghidra_bases.items():
-            for key in self._module_lookup_keys(name):
+            for key in self._module_lookup_keys(name, include_stem_fallback=False):
                 existing = ghidra_normalized.get(key)
                 if existing is not None and existing != (name, base):
                     ambiguous_ghidra_keys.add(key)
@@ -107,15 +107,21 @@ class AddressMapper:
         for key in ambiguous_ghidra_keys:
             ghidra_normalized.pop(key, None)
 
+        used_ghidra_names: set[str] = set()
+
         for mod in runtime_modules:
             match = None
             for key in self._module_lookup_keys(mod.name):
                 if key in ghidra_normalized:
-                    match = key, ghidra_normalized[key]
+                    candidate = ghidra_normalized[key]
+                    if candidate[0] in used_ghidra_names:
+                        continue
+                    match = key, candidate
                     break
 
             if match is not None:
                 _, (orig_name, ghidra_base) = match
+                used_ghidra_names.add(orig_name)
                 mapping = ModuleMapping(
                     name=mod.name,
                     ghidra_base=ghidra_base,
@@ -142,7 +148,7 @@ class AddressMapper:
 
     def get_module(self, name: str) -> Optional[ModuleMapping]:
         """Look up a module mapping by name."""
-        for key in self._module_lookup_keys(name):
+        for key in self._module_lookup_keys(name, include_stem_fallback=False):
             if key in self._ambiguous_module_keys:
                 continue
             mapping = self._modules.get(key)
@@ -173,7 +179,7 @@ class AddressMapper:
             mapping = self.get_module(module)
             if mapping is None:
                 extra = ""
-                if any(key in self._ambiguous_module_keys for key in self._module_lookup_keys(module)):
+                if any(key in self._ambiguous_module_keys for key in self._module_lookup_keys(module, include_stem_fallback=False)):
                     extra = " (ambiguous module name; use the .exe/.dll name or full path)"
                 raise ValueError(f"Module '{module}' not in address map{extra}")
             return mapping.to_runtime(ghidra_addr)
@@ -321,7 +327,11 @@ class AddressMapper:
 
 
     @classmethod
-    def _module_lookup_keys(cls, name: str) -> List[str]:
+    def _module_lookup_keys(
+        cls,
+        name: str,
+        include_stem_fallback: bool = True,
+    ) -> List[str]:
         """Return lookup keys for runtime/Ghidra module matching.
 
         The primary key is extension-aware and canonicalizes common dbgeng name
@@ -333,8 +343,12 @@ class AddressMapper:
         """
         primary = cls._normalize_module_name(name)
         legacy = cls._normalize_name(str(name or "").replace("\\", "/"))
+        compact_legacy = re.sub(r"[^a-z0-9]+", "", legacy)
+        primary_stem = ""
+        if include_stem_fallback and (primary.endswith(".exe") or primary.endswith(".dll")):
+            primary_stem = primary.rsplit(".", 1)[0]
         keys: List[str] = []
-        for key in (primary, legacy):
+        for key in (primary, primary_stem, legacy, compact_legacy):
             if key and key not in keys:
                 keys.append(key)
         return keys
