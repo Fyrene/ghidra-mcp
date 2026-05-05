@@ -77,7 +77,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         """Parse an image base coming from Ghidra metadata.
 
         Ghidra commonly returns image bases as hexadecimal strings without a
-        0x prefix, e.g. "140000000". Treat strings as hexadecimal here;
+        0x prefix, e.g. "150000000". Treat strings as hexadecimal here;
         numeric JSON values remain numeric.
         """
         if isinstance(base, str):

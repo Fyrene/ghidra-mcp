@@ -124,9 +124,9 @@ class TestAddressMapper:
     def test_sanitized_dbgeng_module_name_matches_ghidra_program_name(self):
         mapper = AddressMapper()
         runtime = [ModuleInfo("a_b_c_exe", 0x7FF700000000, 0x200000)]
-        result = mapper.update_from_modules(runtime, {"/a b-c.exe": 0x140000000})
+        result = mapper.update_from_modules(runtime, {"/a b-c.exe": 0x150000000})
         assert result["mapped"] == 1
-        assert mapper.to_runtime(0x140001234, "a_b_c_exe") == 0x7FF700001234
+        assert mapper.to_runtime(0x150001234, "a_b_c_exe") == 0x7FF700001234
 
     def test_same_stem_exe_and_dll_do_not_collide(self):
         mapper = AddressMapper()
@@ -136,11 +136,11 @@ class TestAddressMapper:
         ]
         result = mapper.update_from_modules(
             runtime,
-            {"same-name.exe": 0x140000000, "same-name.dll": 0x180000000},
+            {"same-name.exe": 0x150000000, "same-name.dll": 0x190000000},
         )
         assert result["mapped"] == 2
-        assert mapper.to_runtime(0x140000010, "same_name_exe") == 0x70000010
-        assert mapper.to_runtime(0x180000010, "same_name_dll") == 0x71000010
+        assert mapper.to_runtime(0x150000010, "same_name_exe") == 0x70000010
+        assert mapper.to_runtime(0x190000010, "same_name_dll") == 0x71000010
 
     def test_single_ghidra_stem_does_not_map_to_both_exe_and_dll(self):
         mapper = AddressMapper()
@@ -148,7 +148,7 @@ class TestAddressMapper:
             ModuleInfo("same_name_exe", 0x70000000, 0x1000),
             ModuleInfo("same_name_dll", 0x71000000, 0x1000),
         ]
-        result = mapper.update_from_modules(runtime, {"same-name": 0x140000000})
+        result = mapper.update_from_modules(runtime, {"same-name": 0x150000000})
         assert result["mapped"] == 1
         assert mapper.get_module("same_name_exe") is not None
         assert mapper.get_module("same_name_dll") is None
@@ -159,7 +159,7 @@ class TestAddressMapper:
             ModuleInfo("same_name_dll", 0x71000000, 0x1000),
             ModuleInfo("same_name_exe", 0x70000000, 0x1000),
         ]
-        result = mapper.update_from_modules(runtime, {"same-name": 0x140000000})
+        result = mapper.update_from_modules(runtime, {"same-name": 0x150000000})
         assert result["mapped"] == 1
         assert mapper.get_module("same_name_exe") is not None
 
@@ -167,13 +167,13 @@ class TestAddressMapper:
         mapper = AddressMapper()
         runtime = [
             ModuleInfo(
-                r"C:\\Games\\Warhammer 40,000 Space Marine 2 (2024)\\Space Marine 2\\client_pc\\root\\bin\\pc\\Warhammer 40000 Space Marine 2 - Retail.exe",
+                r"C:\\Games\\Project Zero\\bin\\GameClient - Retail.exe",
                 0x7FF700000000,
                 0x200000,
             )
         ]
-        mapper.update_from_modules(runtime, {"Warhammer 40000 Space Marine 2 - Retail": 0x140000000})
-        assert mapper.get_module("Warhammer_40000_Space_Marine_2___Retail_exe") is not None
+        mapper.update_from_modules(runtime, {"GameClient - Retail": 0x150000000})
+        assert mapper.get_module("GameClient___Retail_exe") is not None
 
 
 class TestOrdinalParsing:
