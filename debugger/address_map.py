@@ -107,6 +107,10 @@ class AddressMapper:
         for key in ambiguous_ghidra_keys:
             ghidra_normalized.pop(key, None)
 
+        # Keep these keys globally ambiguous so runtime aliases cannot
+        # reintroduce them and accidentally map to a different module later.
+        self._ambiguous_module_keys.update(ambiguous_ghidra_keys)
+
         for mod in runtime_modules:
             match = None
             for key in self._module_lookup_keys(mod.name):

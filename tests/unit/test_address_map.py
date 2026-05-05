@@ -141,6 +141,21 @@ class TestAddressMapper:
         assert mapper.to_runtime(0x140000010, "same_name_exe") == 0x70000010
         assert mapper.to_runtime(0x180000010, "same_name_dll") == 0x71000010
 
+
+    def test_ambiguous_ghidra_lookup_key_remains_unmappable(self):
+        mapper = AddressMapper()
+        runtime = [
+            ModuleInfo("a_b_dll", 0x70000000, 0x1000),
+            ModuleInfo("ab_dll", 0x71000000, 0x1000),
+        ]
+        result = mapper.update_from_modules(
+            runtime, {"a-b.dll": 0x140000000, "ab.dll": 0x180000000}
+        )
+        assert result["mapped"] == 0
+
+        with pytest.raises(ValueError, match="ambiguous module name"):
+            mapper.to_runtime(0x140000010, "ab.dll")
+
     def test_same_lookup_key_with_identical_base_is_not_ambiguous(self):
         mapper = AddressMapper()
         runtime = [ModuleInfo("game.exe", 0x70000000, 0x1000)]
