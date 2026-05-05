@@ -83,12 +83,10 @@ mcp = FastMCP("ghidra-mcp")
 # Enable tools/list_changed notifications so clients re-fetch tools after dynamic registration
 _orig_init_options = mcp._mcp_server.create_initialization_options
 
-
 def _patched_init_options(**kwargs):
     return _orig_init_options(
         notification_options=NotificationOptions(tools_changed=True), **kwargs
     )
-
 
 mcp._mcp_server.create_initialization_options = _patched_init_options
 
@@ -105,11 +103,9 @@ _connected_project: str | None = None  # Project name for auto-reconnect
 # multiple MCP tool calls arrive concurrently (see GitHub issue #91).
 _ghidra_lock = threading.Lock()
 
-
 # ==========================================================================
 # UDS Transport
 # ==========================================================================
-
 
 class UnixHTTPConnection(http.client.HTTPConnection):
     """HTTP connection over a Unix domain socket."""
@@ -122,7 +118,6 @@ class UnixHTTPConnection(http.client.HTTPConnection):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         self.sock.connect(self.socket_path)
-
 
 def get_socket_dir() -> Path:
     """Get the GhidraMCP socket runtime directory."""
@@ -145,25 +140,21 @@ def get_socket_dir() -> Path:
         return Path(tmpdir) / f"ghidra-mcp-{user}"
     return Path(f"/tmp/ghidra-mcp-{user}")
 
-
 # Enhanced error classes
 class GhidraConnectionError(Exception):
     """Raised when connection to Ghidra server fails"""
 
     pass
 
-
 class GhidraAnalysisError(Exception):
     """Raised when Ghidra analysis operation fails"""
 
     pass
 
-
 class GhidraValidationError(Exception):
     """Raised when input validation fails"""
 
     pass
-
 
 # Input validation patterns
 HEX_ADDRESS_PATTERN = re.compile(r"^0x[0-9a-fA-F]+$")
@@ -179,7 +170,6 @@ TOOL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 MAX_TOOL_NAME_LENGTH = 64
 INVALID_TOOL_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_-]+")
 REPEATED_UNDERSCORES = re.compile(r"_+")
-
 
 def is_pid_alive(pid: int) -> bool:
     """Check if a process with the given PID is still running."""
@@ -216,7 +206,6 @@ def is_pid_alive(pid: int) -> bool:
             return False
         raise
 
-
 def validate_server_url(url: str) -> bool:
     """Validate that the server URL is safe to use"""
     try:
@@ -224,7 +213,6 @@ def validate_server_url(url: str) -> bool:
         return parsed.hostname in ("127.0.0.1", "localhost", "::1")
     except Exception:
         return False
-
 
 def validate_hex_address(address: str) -> bool:
     """Validate that an address string looks like a valid hex address or segment:offset."""
@@ -235,7 +223,6 @@ def validate_hex_address(address: str) -> bool:
     if SEGMENT_ADDRESS_PATTERN.match(address):
         return True
     return bool(HEX_ADDRESS_PATTERN.match(address))
-
 
 def sanitize_tool_name(name: str) -> str:
     """Normalize an MCP tool name for clients with strict CAPI validation."""
@@ -250,7 +237,6 @@ def sanitize_tool_name(name: str) -> str:
     if not TOOL_NAME_PATTERN.match(sanitized):
         raise ValueError(f"Sanitized tool name {sanitized!r} is still invalid")
     return sanitized
-
 
 def _allocate_tool_name(base_name: str, used_names: set[str]) -> str:
     """Return a unique MCP tool name, adding a deterministic suffix on collision."""
@@ -270,14 +256,12 @@ def _allocate_tool_name(base_name: str, used_names: set[str]) -> str:
             return candidate
         suffix += 1
 
-
 def validate_tool_name(name: str) -> None:
     """Fail fast if an exposed MCP tool name is not CAPI-safe."""
     if not TOOL_NAME_PATTERN.match(name) or len(name) > MAX_TOOL_NAME_LENGTH:
         raise ValueError(
             f"Invalid MCP tool name {name!r}; expected {TOOL_NAME_PATTERN.pattern} and length <= {MAX_TOOL_NAME_LENGTH}"
         )
-
 
 def uds_request(
     socket_path: str,
@@ -312,11 +296,9 @@ def uds_request(
         conn.close()
         raise
 
-
 # ==========================================================================
 # TCP Transport
 # ==========================================================================
-
 
 def tcp_request(
     base_url: str,
@@ -353,11 +335,9 @@ def tcp_request(
         conn.close()
         raise
 
-
 # ==========================================================================
 # Unified request function
 # ==========================================================================
-
 
 def do_request(
     method: str,
@@ -385,11 +365,9 @@ def do_request(
                 "No Ghidra instance connected. Use connect_instance() first."
             )
 
-
 # ==========================================================================
 # Instance discovery
 # ==========================================================================
-
 
 def discover_instances() -> list[dict]:
     """Scan socket directory and query each live instance for info."""
@@ -430,14 +408,12 @@ def discover_instances() -> list[dict]:
 
     return instances
 
-
 def _unwrap_response_data(text: str) -> dict:
     """Unwrap Response.ok() payloads while preserving plain JSON responses."""
     data = json.loads(text)
     if isinstance(data, dict) and "data" in data:
         return data["data"]
     return data
-
 
 def discover_active_tcp_instance() -> dict | None:
     """Return the active TCP fallback connection as an instance-like record."""
@@ -475,11 +451,9 @@ def discover_active_tcp_instance() -> dict | None:
 
     return info
 
-
 # ==========================================================================
 # HTTP dispatch
 # ==========================================================================
-
 
 def get_timeout(endpoint: str, payload: dict | None = None) -> int:
     """Get timeout for an endpoint, with dynamic scaling for batch ops."""
@@ -500,7 +474,6 @@ def get_timeout(endpoint: str, payload: dict | None = None) -> int:
         return min(base + count * 8, 600)
 
     return base
-
 
 def _coerce_comment_entries(value):
     if isinstance(value, str):
@@ -524,7 +497,6 @@ def _coerce_comment_entries(value):
             if (comment.get("comment") if isinstance(comment, dict) else comment) is not None
         ]
     return value
-
 
 def _normalize_post_payload(endpoint: str, data: dict) -> dict:
     if endpoint.strip("/").split("/")[-1] == "batch_set_comments":
@@ -578,7 +550,6 @@ def _try_reconnect() -> bool:
 
     return False
 
-
 def _ensure_connected() -> str | None:
     """Check connection and attempt reconnect if needed. Returns error string or None."""
     if _transport_mode == "none":
@@ -591,7 +562,6 @@ def _ensure_connected() -> str | None:
             )
         return "No Ghidra instance connected. Use connect_instance() first."
     return None
-
 
 def sanitize_address(address: str) -> str:
     """Normalize address format for Ghidra AddressFactory.
@@ -622,7 +592,6 @@ def sanitize_address(address: str) -> str:
         address = "0x" + address
     return address.lower()
 
-
 def dispatch_get(endpoint: str, params: dict | None = None, retries: int = 3) -> str:
     """GET request via active transport. Returns raw response text."""
     err = _ensure_connected()
@@ -652,7 +621,6 @@ def dispatch_get(endpoint: str, params: dict | None = None, retries: int = 3) ->
             return json.dumps({"error": str(e)})
 
     return json.dumps({"error": "Max retries exceeded"})
-
 
 def dispatch_post(
     endpoint: str, data: dict, retries: int = 3, query_params: dict | None = None
@@ -691,7 +659,6 @@ def dispatch_post(
 
     return json.dumps({"error": "Max retries exceeded"})
 
-
 # ==========================================================================
 # Schema parsing — converts upstream /mcp/schema to internal tool defs
 # ==========================================================================
@@ -708,7 +675,6 @@ _TYPE_MAP = {
     "any": str,
     "address": str,
 }
-
 
 def _normalize_tool_def_names(schema: list[dict]) -> list[dict]:
     """Normalize and de-duplicate MCP-visible names while keeping HTTP endpoints intact."""
@@ -738,7 +704,6 @@ def _normalize_tool_def_names(schema: list[dict]) -> list[dict]:
         normalized_schema.append(normalized)
 
     return normalized_schema
-
 
 def _parse_schema(raw: dict) -> list[dict]:
     """Convert upstream AnnotationScanner schema to internal tool defs.
@@ -786,7 +751,6 @@ def _parse_schema(raw: dict) -> list[dict]:
         )
 
     return _normalize_tool_def_names(tool_defs)
-
 
 # ==========================================================================
 # Dynamic tool registration from /mcp/schema
@@ -839,7 +803,6 @@ CORE_GROUPS = {"listing", "function", "program"}
 # CLI-configurable: --lazy keeps only default groups, otherwise load all
 _lazy_mode = False  # default: eager (load all groups on connect)
 _default_groups: set[str] = CORE_GROUPS
-
 
 def _build_tool_function(endpoint: str, http_method: str, params_schema: dict):
     """Build a callable that dispatches to the Ghidra HTTP endpoint."""
@@ -928,7 +891,6 @@ def _build_tool_function(endpoint: str, http_method: str, params_schema: dict):
 
     return handler
 
-
 def _register_tool_def(tool_def: dict) -> bool:
     """Register a single tool from a schema definition. Returns True if registered."""
     name = tool_def["name"]
@@ -947,7 +909,6 @@ def _register_tool_def(tool_def: dict) -> bool:
     mcp.tool(name=name, description=description)(handler)
     _dynamic_tool_names.append(name)
     return True
-
 
 def register_tools_from_schema(
     schema: list[dict], groups: set[str] | None = None
@@ -985,7 +946,6 @@ def register_tools_from_schema(
 
     return count
 
-
 def _load_group(group_name: str) -> list[str]:
     """Load tools for a specific group from cached schema. Returns list of newly loaded tool names."""
     loaded_names: list[str] = []
@@ -1000,7 +960,6 @@ def _load_group(group_name: str) -> list[str]:
     if loaded_names:
         _loaded_groups.add(group_name)
     return loaded_names
-
 
 def _unload_group(group_name: str) -> int:
     """Unload tools for a specific group. Returns count of removed tools."""
@@ -1024,7 +983,6 @@ def _unload_group(group_name: str) -> int:
     if to_remove:
         _loaded_groups.discard(group_name)
     return len(to_remove)
-
 
 def _get_group_info() -> list[dict]:
     """Get info about all tool groups from cached schema."""
@@ -1050,7 +1008,6 @@ def _get_group_info() -> list[dict]:
         result.append(info)
     return result
 
-
 def _fetch_and_register_schema(load_all: bool = False) -> int:
     """Fetch /mcp/schema from connected instance and register tools.
 
@@ -1069,17 +1026,14 @@ def _fetch_and_register_schema(load_all: bool = False) -> int:
     groups = None if load_all else _default_groups
     return register_tools_from_schema(schema, groups=groups)
 
-
 async def _notify_tools_changed(ctx: Context | None) -> None:
     """Send tools/list_changed notification if context is available."""
     if ctx is not None and ctx._request_context is not None:
         await ctx.request_context.session.send_tool_list_changed()
 
-
 # ==========================================================================
 # Static MCP tools (always available)
 # ==========================================================================
-
 
 @mcp.tool()
 def list_instances() -> str:
@@ -1108,7 +1062,6 @@ def list_instances() -> str:
             inst["connected"] = inst["socket"] == _active_socket
 
     return json.dumps({"instances": instances}, indent=2)
-
 
 @mcp.tool()
 async def connect_instance(project: str, ctx: Context | None = None) -> str:
@@ -1221,7 +1174,6 @@ async def connect_instance(project: str, ctx: Context | None = None) -> str:
             }
         )
 
-
 @mcp.tool()
 def list_tool_groups() -> str:
     """
@@ -1236,7 +1188,6 @@ def list_tool_groups() -> str:
         )
     groups = _get_group_info()
     return json.dumps({"groups": groups, "total_tools": len(_full_schema)}, indent=2)
-
 
 @mcp.tool()
 async def load_tool_group(group: str, ctx: Context | None = None) -> str:
@@ -1303,7 +1254,6 @@ async def load_tool_group(group: str, ctx: Context | None = None) -> str:
         }
     )
 
-
 @mcp.tool()
 async def unload_tool_group(group: str, ctx: Context | None = None) -> str:
     """
@@ -1335,7 +1285,6 @@ async def unload_tool_group(group: str, ctx: Context | None = None) -> str:
             "loaded_groups": sorted(_loaded_groups),
         }
     )
-
 
 @mcp.tool()
 async def check_tools(tools: str) -> str:
@@ -1382,7 +1331,6 @@ async def check_tools(tools: str) -> str:
             "summary": f"{callable_count}/{len(tool_names)} callable",
         }
     )
-
 
 @mcp.tool()
 async def import_file(
@@ -1458,11 +1406,9 @@ async def import_file(
 
     return result
 
-
 # ==========================================================================
 # Auto-connect on startup
 # ==========================================================================
-
 
 def _auto_connect():
     """Try to auto-connect to a single running instance on startup."""
@@ -1508,13 +1454,11 @@ def _auto_connect():
                 "No Ghidra instances found. Tools will be registered on connect_instance()."
             )
 
-
 # ==========================================================================
 # Debugger tools (proxy to debugger/server.py on DEBUGGER_URL)
 # ==========================================================================
 
 DEBUGGER_URL = os.getenv("GHIDRA_DEBUGGER_URL", "http://127.0.0.1:8099")
-
 
 def _debugger_request(
     method: str,
@@ -1555,7 +1499,6 @@ def _debugger_request(
     finally:
         conn.close()
 
-
 @mcp.tool()
 def debugger_attach(target: str) -> str:
     """Attach the debugger to a running process for live dynamic analysis.
@@ -1572,54 +1515,21 @@ def debugger_attach(target: str) -> str:
     # Auto-sync address map if Ghidra is connected
     if _transport_mode != "none":
         try:
-            # Fetch image bases from Ghidra for all open programs
-            programs_text = dispatch_get("/list_open_programs")
-            if programs_text:
-                programs_data = json.loads(programs_text)
-                programs = (
-                    programs_data
-                    if isinstance(programs_data, list)
-                    else programs_data.get("programs", [])
-                )
-                ghidra_bases = {}
-                for prog in programs:
-                    prog_path = (
-                        prog
-                        if isinstance(prog, str)
-                        else prog.get("path", prog.get("name", ""))
-                    )
-                    if prog_path:
-                        try:
-                            meta_text = dispatch_get(
-                                "/get_metadata", params={"program": prog_path}
-                            )
-                            meta = json.loads(meta_text)
-                            image_base = meta.get("imageBase", meta.get("image_base"))
-                            if image_base:
-                                ghidra_bases[prog_path] = image_base
-                        except Exception:
-                            pass
-                if ghidra_bases:
-                    _debugger_request(
-                        "POST", "/debugger/sync_modules", {"ghidra_bases": ghidra_bases}
-                    )
+            _sync_debugger_modules_from_ghidra()
         except Exception as e:
             logger.warning(f"Auto-sync address map failed (non-fatal): {e}")
 
     return result
-
 
 @mcp.tool()
 def debugger_detach() -> str:
     """Detach from the debugged process. The process continues running."""
     return _debugger_request("POST", "/debugger/detach")
 
-
 @mcp.tool()
 def debugger_status() -> str:
     """Get debugger connection status, loaded modules, active traces/watches."""
     return _debugger_request("GET", "/debugger/status")
-
 
 @mcp.tool()
 def debugger_modules() -> str:
@@ -1630,6 +1540,40 @@ def debugger_modules() -> str:
     """
     return _debugger_request("GET", "/debugger/modules")
 
+def _sync_debugger_modules_from_ghidra() -> str:
+    """Collect open-program image bases from Ghidra and sync debugger mapper."""
+    programs_text = dispatch_get("/list_open_programs")
+    if not programs_text:
+        return json.dumps({"error": "No response from /list_open_programs"})
+
+    programs_data = _unwrap_response_data(programs_text)
+    programs = programs_data if isinstance(programs_data, list) else programs_data.get("programs", [])
+
+    ghidra_bases = {}
+    for prog in programs:
+        if isinstance(prog, str):
+            prog_path = prog
+            inline_base = None
+        else:
+            prog_path = prog.get("path") or prog.get("name", "")
+            inline_base = prog.get("image_base") or prog.get("imageBase")
+        if not prog_path:
+            continue
+        if inline_base:
+            ghidra_bases[prog_path] = inline_base
+            continue
+        try:
+            meta_text = dispatch_get("/get_metadata", params={"program": prog_path})
+            meta = _unwrap_response_data(meta_text)
+            image_base = meta.get("imageBase", meta.get("image_base"))
+            if image_base:
+                ghidra_bases[prog_path] = image_base
+        except Exception:
+            continue
+
+    if not ghidra_bases:
+        return json.dumps({"error": "No open programs with image base metadata"})
+    return _debugger_request("POST", "/debugger/sync_modules", {"ghidra_bases": ghidra_bases})
 
 @mcp.tool()
 def debugger_resolve_ordinal(dll: str, ordinal: int) -> str:
@@ -1645,7 +1589,6 @@ def debugger_resolve_ordinal(dll: str, ordinal: int) -> str:
     return _debugger_request(
         "GET", "/debugger/ordinal", query={"dll": dll, "ordinal": str(ordinal)}
     )
-
 
 @mcp.tool()
 def debugger_set_breakpoint(
@@ -1673,7 +1616,6 @@ def debugger_set_breakpoint(
         },
     )
 
-
 @mcp.tool()
 def debugger_remove_breakpoint(bp_id: int) -> str:
     """Remove a breakpoint by its ID.
@@ -1683,12 +1625,10 @@ def debugger_remove_breakpoint(bp_id: int) -> str:
     """
     return _debugger_request("DELETE", f"/debugger/breakpoint/{bp_id}")
 
-
 @mcp.tool()
 def debugger_list_breakpoints() -> str:
     """List all active breakpoints with their addresses and status."""
     return _debugger_request("GET", "/debugger/breakpoints")
-
 
 @mcp.tool()
 def debugger_continue() -> str:
@@ -1699,7 +1639,6 @@ def debugger_continue() -> str:
     """
     return _debugger_request("POST", "/debugger/go")
 
-
 @mcp.tool()
 def debugger_step_into(count: int = 1) -> str:
     """Single-step into the next instruction(s). Follows calls.
@@ -1708,7 +1647,6 @@ def debugger_step_into(count: int = 1) -> str:
         count: Number of instructions to step (default 1).
     """
     return _debugger_request("POST", "/debugger/step_into", {"count": count})
-
 
 @mcp.tool()
 def debugger_step_over(count: int = 1) -> str:
@@ -1719,7 +1657,6 @@ def debugger_step_over(count: int = 1) -> str:
     """
     return _debugger_request("POST", "/debugger/step_over", {"count": count})
 
-
 @mcp.tool()
 def debugger_registers() -> str:
     """Read all CPU registers. Must be stopped at a breakpoint.
@@ -1727,7 +1664,6 @@ def debugger_registers() -> str:
     Returns EAX-EDI, ESP, EBP, EIP, EFLAGS for x86.
     """
     return _debugger_request("GET", "/debugger/registers")
-
 
 @mcp.tool()
 def debugger_read_memory(
@@ -1754,7 +1690,6 @@ def debugger_read_memory(
         },
     )
 
-
 @mcp.tool()
 def debugger_stack_trace(depth: int = 20) -> str:
     """Get the call stack backtrace with return addresses mapped to Ghidra symbols.
@@ -1763,7 +1698,6 @@ def debugger_stack_trace(depth: int = 20) -> str:
         depth: Maximum number of stack frames (default 20).
     """
     return _debugger_request("GET", "/debugger/stack", query={"depth": str(depth)})
-
 
 @mcp.tool()
 def debugger_read_args(
@@ -1784,7 +1718,6 @@ def debugger_read_args(
         "/debugger/read_args",
         query={"convention": convention, "count": str(count), "arg_names": arg_names},
     )
-
 
 @mcp.tool()
 def debugger_trace_function(
@@ -1825,7 +1758,6 @@ def debugger_trace_function(
         },
     )
 
-
 @mcp.tool()
 def debugger_trace_stop(trace_id: int = -1) -> str:
     """Stop a function trace. Use trace_id=-1 to stop all traces.
@@ -1834,7 +1766,6 @@ def debugger_trace_stop(trace_id: int = -1) -> str:
         trace_id: ID returned by debugger_trace_function, or -1 for all.
     """
     return _debugger_request("POST", "/debugger/trace/stop", {"trace_id": trace_id})
-
 
 @mcp.tool()
 def debugger_trace_log(trace_id: int = -1, last_n: int = 50) -> str:
@@ -1850,12 +1781,10 @@ def debugger_trace_log(trace_id: int = -1, last_n: int = 50) -> str:
         query={"trace_id": str(trace_id), "last_n": str(last_n)},
     )
 
-
 @mcp.tool()
 def debugger_trace_list() -> str:
     """List all active and completed traces with hit counts."""
     return _debugger_request("GET", "/debugger/trace/list")
-
 
 @mcp.tool()
 def debugger_watch_memory(
@@ -1883,7 +1812,6 @@ def debugger_watch_memory(
         },
     )
 
-
 @mcp.tool()
 def debugger_watch_stop(watch_id: int = -1) -> str:
     """Stop a memory watchpoint. Use watch_id=-1 to stop all.
@@ -1892,7 +1820,6 @@ def debugger_watch_stop(watch_id: int = -1) -> str:
         watch_id: ID returned by debugger_watch_memory, or -1 for all.
     """
     return _debugger_request("POST", "/debugger/watch/stop", {"watch_id": watch_id})
-
 
 @mcp.tool()
 def debugger_watch_log(watch_id: int = -1, last_n: int = 50) -> str:
@@ -1908,11 +1835,9 @@ def debugger_watch_log(watch_id: int = -1, last_n: int = 50) -> str:
         query={"watch_id": str(watch_id), "last_n": str(last_n)},
     )
 
-
 # ==========================================================================
 # Main
 # ==========================================================================
-
 
 def main():
     global _lazy_mode, _default_groups
@@ -1993,7 +1918,6 @@ def main():
         path = "/sse" if args.transport == "sse" else "/mcp"
         logger.info(f"MCP endpoint: http://{host}:{port}{path}")
     mcp.run(transport=args.transport)
-
 
 if __name__ == "__main__":
     main()

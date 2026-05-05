@@ -355,6 +355,14 @@ class TestModulesEndpoint:
         assert body["count"] == len(body["modules"])
 
 
+class TestSyncModulesEndpoint:
+    def test_parse_ghidra_base_treats_bare_string_as_hex(self):
+        assert RequestHandler._parse_ghidra_base("140000000") == 0x140000000
+
+    def test_parse_ghidra_base_accepts_0x_prefix(self):
+        assert RequestHandler._parse_ghidra_base("0x180000000") == 0x180000000
+
+
 # ---------------------------------------------------------------------------
 # Tests: routing
 # ---------------------------------------------------------------------------

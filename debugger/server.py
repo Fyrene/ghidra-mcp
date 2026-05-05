@@ -72,6 +72,23 @@ class RequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         logger.debug(format, *args)
 
+    @staticmethod
+    def _parse_ghidra_base(base) -> int:
+        """Parse an image base coming from Ghidra metadata.
+
+        Ghidra commonly returns image bases as hexadecimal strings without a
+        0x prefix, e.g. "140000000". Treat strings as hexadecimal here;
+        numeric JSON values remain numeric.
+        """
+        if isinstance(base, str):
+            text = base.strip().replace("`", "")
+            if not text:
+                raise ValueError("empty image base")
+            if ":" in text:
+                raise ValueError(f"segmented image base is not supported: {base!r}")
+            return int(text[2:] if text.lower().startswith("0x") else text, 16)
+        return int(base)
+
     # -- Routing -----------------------------------------------------------
 
     def do_GET(self):
@@ -201,10 +218,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         # Convert hex string values to int if needed
         parsed_bases = {}
         for name, base in ghidra_bases.items():
-            if isinstance(base, str):
-                parsed_bases[name] = int(base, 16) if base.startswith("0x") else int(base)
-            else:
-                parsed_bases[name] = int(base)
+            try:
+                parsed_bases[name] = self._parse_ghidra_base(base)
+            except (TypeError, ValueError) as exc:
+                self._send_error(
+                    400, f"Invalid base for ghidra_bases[{name!r}]: {base!r} ({exc})"
+                )
+                return
 
         runtime_modules = ds.engine.get_modules()
         result = ds.mapper.update_from_modules(runtime_modules, parsed_bases)

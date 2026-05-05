@@ -70,6 +70,7 @@ class AddressMapper:
 
     def __init__(self):
         self._modules: Dict[str, ModuleMapping] = {}  # normalized_name -> mapping
+        self._ambiguous_module_keys: set[str] = set()
         self._ordinals: Dict[str, Dict[int, OrdinalEntry]] = {}  # dll -> {ordinal -> entry}
 
     # -- Module mapping ----------------------------------------------------
@@ -86,26 +87,43 @@ class AddressMapper:
             Summary of mapped/unmapped modules.
         """
         self._modules.clear()
+        self._ambiguous_module_keys.clear()
         mapped = []
         unmapped = []
 
-        # Normalize Ghidra base names for matching
+        # Normalize Ghidra base names for matching. Keep .exe/.dll in the
+        # primary key so programs with the same stem do not collide, but also
+        # keep the old extensionless key when it is unique for compatibility.
         ghidra_normalized: Dict[str, Tuple[str, int]] = {}
+        ambiguous_ghidra_keys: set[str] = set()
         for name, base in ghidra_bases.items():
-            key = self._normalize_name(name)
-            ghidra_normalized[key] = (name, base)
+            for key in self._module_lookup_keys(name):
+                existing = ghidra_normalized.get(key)
+                if existing is not None and existing != (name, base):
+                    ambiguous_ghidra_keys.add(key)
+                    continue
+                ghidra_normalized[key] = (name, base)
+
+        for key in ambiguous_ghidra_keys:
+            ghidra_normalized.pop(key, None)
 
         for mod in runtime_modules:
-            key = self._normalize_name(mod.name)
-            if key in ghidra_normalized:
-                orig_name, ghidra_base = ghidra_normalized[key]
+            match = None
+            for key in self._module_lookup_keys(mod.name):
+                if key in ghidra_normalized:
+                    match = key, ghidra_normalized[key]
+                    break
+
+            if match is not None:
+                _, (orig_name, ghidra_base) = match
                 mapping = ModuleMapping(
                     name=mod.name,
                     ghidra_base=ghidra_base,
                     runtime_base=mod.runtime_base,
                     size=mod.size,
                 )
-                self._modules[key] = mapping
+                for alias in self._module_lookup_keys(mod.name) + self._module_lookup_keys(orig_name):
+                    self._add_module_alias(alias, mapping)
                 mod.ghidra_base = ghidra_base
                 mapped.append(mod.name)
                 logger.info(
@@ -124,10 +142,16 @@ class AddressMapper:
 
     def get_module(self, name: str) -> Optional[ModuleMapping]:
         """Look up a module mapping by name."""
-        return self._modules.get(self._normalize_name(name))
+        for key in self._module_lookup_keys(name):
+            if key in self._ambiguous_module_keys:
+                continue
+            mapping = self._modules.get(key)
+            if mapping is not None:
+                return mapping
+        return None
 
     def get_all_modules(self) -> List[ModuleMapping]:
-        return list(self._modules.values())
+        return self._unique_modules()
 
     # -- Address translation -----------------------------------------------
 
@@ -148,17 +172,23 @@ class AddressMapper:
         if module:
             mapping = self.get_module(module)
             if mapping is None:
-                raise ValueError(f"Module '{module}' not in address map")
+                extra = ""
+                if any(
+                    key in self._ambiguous_module_keys
+                    for key in self._module_lookup_keys(module)
+                ):
+                    extra = " (ambiguous module name; use the .exe/.dll name or full path)"
+                raise ValueError(f"Module '{module}' not in address map{extra}")
             return mapping.to_runtime(ghidra_addr)
 
         # Auto-detect module from address range
-        for mapping in self._modules.values():
+        for mapping in self._unique_modules():
             if mapping.contains_ghidra(ghidra_addr):
                 return mapping.to_runtime(ghidra_addr)
 
         raise ValueError(
             f"Address 0x{ghidra_addr:08X} not in any mapped module. "
-            f"Mapped: {', '.join(m.name for m in self._modules.values())}")
+            f"Mapped: {', '.join(m.name for m in self._unique_modules())}")
 
     def to_ghidra(self, runtime_addr: int) -> Tuple[str, int]:
         """Convert a runtime address to (module_name, ghidra_address).
@@ -166,7 +196,7 @@ class AddressMapper:
         Raises:
             ValueError: If the address can't be mapped.
         """
-        for mapping in self._modules.values():
+        for mapping in self._unique_modules():
             if mapping.contains_runtime(runtime_addr):
                 return mapping.name, mapping.to_ghidra(runtime_addr)
 
@@ -291,3 +321,59 @@ class AddressMapper:
         basename = os.path.basename(name)
         stem = os.path.splitext(basename)[0]
         return stem.lower()
+
+    @classmethod
+    def _module_lookup_keys(cls, name: str) -> List[str]:
+        """Return lookup keys for runtime/Ghidra module matching.
+
+        The primary key is extension-aware and canonicalizes common dbgeng name
+        sanitization where punctuation, spaces, and the extension separator may
+        be replaced by underscores.
+
+        The secondary key is the historical extensionless key, used only when
+        unique. This preserves compatibility for inputs like "D2Common".
+        """
+        primary = cls._normalize_module_name(name)
+        legacy = cls._normalize_name(str(name or "").replace("\\", "/"))
+        keys: List[str] = []
+        for key in (primary, legacy):
+            if key and key not in keys:
+                keys.append(key)
+        return keys
+
+    @staticmethod
+    def _normalize_module_name(name: str) -> str:
+        text = str(name or "").strip().replace("\\", "/")
+        basename = os.path.basename(text).lower()
+        if not basename:
+            return ""
+
+        # dbgeng module names may replace the file extension separator with an
+        # underscore, especially for EXEs whose display name was sanitized.
+        basename = re.sub(r"[\s_.-]+(exe|dll)$", r".\1", basename)
+
+        stem, ext = os.path.splitext(basename)
+        stem = re.sub(r"[^a-z0-9]+", "", stem)
+        if ext in {".exe", ".dll"}:
+            return f"{stem}{ext}"
+        return stem
+
+    def _add_module_alias(self, key: str, mapping: ModuleMapping) -> None:
+        if not key or key in self._ambiguous_module_keys:
+            return
+        existing = self._modules.get(key)
+        if existing is None:
+            self._modules[key] = mapping
+        elif existing is not mapping:
+            self._modules.pop(key, None)
+            self._ambiguous_module_keys.add(key)
+
+    def _unique_modules(self) -> List[ModuleMapping]:
+        result: List[ModuleMapping] = []
+        seen: set[tuple[int, int, str]] = set()
+        for mapping in self._modules.values():
+            ident = (mapping.runtime_base, mapping.size, mapping.name)
+            if ident not in seen:
+                seen.add(ident)
+                result.append(mapping)
+        return result
